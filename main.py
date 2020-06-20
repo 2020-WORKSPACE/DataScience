@@ -4,7 +4,7 @@ from attention_module import *
 import torch
 import torch.nn as nn
 from torch import optim 
-
+import nltk.translate.bleu_score as bleu
 import os
 import time
 
@@ -114,11 +114,19 @@ def print_index_text(index_text, ind2word, country):
     if country == 0: # 소스 언어
         print("English Text----")
     else: # 타깃언어
-        print("France Text----")
+        print("French Text----")
 
     for word in index_text:
         print(ind2word[word], end=' ')
     print('')
+
+def convert_index_text(index_text, ind2word):
+    result = []
+    for word in index_text:
+        result.append(ind2word[word])
+    result.pop()
+    # print(result)
+    return result
 
 def evaluate_Iter(input_tensor, target_tensor, encoder, decoder, source_word2index, target_word2index, MAX_LENGTH, device):
     
@@ -205,12 +213,15 @@ def evaluate(encoder, decoder, source_index2word, source_word2index, target_inde
             torch.tensor(t, dtype=torch.long, device=device).view(-1, 1)) \
             for s, t in zip(source_ind_texts, target_ind_labels)]
 
+    bleu_references = []
+    bleu_hypotheses = []
+
     #########################################
     # Start testing
     #########################################
     print("\n<START TESTING-------------->")   
 
-    for iter in range(1, 10):
+    for iter in range(1, 100):
         testing_pair  = testing_pairs[iter - 1]
         input_tensor = testing_pair[0]
         target_tensor = testing_pair[1]
@@ -222,9 +233,30 @@ def evaluate(encoder, decoder, source_index2word, source_word2index, target_inde
         print_index_text(input_tensor.squeeze().cpu().tolist(), source_index2word, 0)
         # print(decoded_text.view(1, -1).cpu().tolist()[0])
         print_index_text(decoded_text.view(1, -1).cpu().tolist()[0], target_index2word, 1)
-        print('--------------------------------------')
+        bleu_references.append(convert_index_text(target_tensor.squeeze().cpu().tolist(), target_index2word))
+        bleu_hypotheses.append(convert_index_text(decoded_text.view(1, -1).cpu().tolist()[0], target_index2word))
+
+    #########################################
+    # BLEU 측정 (nltk 설치 필수)
+    #########################################
+    print("BLEU SCORE")
+    print(bleu.corpus_bleu(bleu_references, bleu_hypotheses))
+    print('--------------------------------------')
 
 def main():
+
+    #########################################
+    # 예시 문장을 통해 BLEU 테스트 (nltk 설치 필수)
+    #########################################
+    hyp1 = ['It', 'is', 'a', 'guide', 'to', 'action', 'which', 'ensures', 'that', 'the', 'military', 'always', 'obeys', 'the',  'commands', 'of', 'the', 'party']
+    ref1a = ['It', 'is', 'a', 'guide', 'to', 'action', 'that', 'ensures', 'that', 'the', 'military', 'will', 'forever', 'heed', 'Party', 'commands']
+    ref1b = ['It', 'is', 'the', 'guiding', 'principle', 'which', 'guarantees', 'the', 'military', 'forces', 'always', 'being', 'under', 'the', 'command', 'of', 'the', 'Party']
+    ref1c = ['It', 'is', 'the', 'practical', 'guide', 'for', 'the', 'army', 'always', 'to', 'heed', 'the', 'directions', 'of', 'the', 'party']
+    hyp2 = ['he', 'read', 'the', 'book', 'because', 'he', 'was', 'interested', 'in', 'world', 'history']
+    ref2a = ['he', 'was', 'interested', 'in', 'world', 'history', 'because', 'he', 'read', 'the', 'book']
+
+    print(bleu.corpus_bleu([[ref1a, ref1b], [ref2a]], [hyp1, hyp2]))
+    print("BLEU Available")
     
     #########################################
     # cuda를 사용할 것인지, cpu를 사용할 것인지 선택
@@ -317,7 +349,7 @@ def main():
             target_tensor = training_pair[1]
 
             #########################################
-            # 🍔 trian 함수가 우리가 채울 부분
+            # 🍔 train 함수가 우리가 채울 부분
             #########################################
             loss = train(input_tensor, target_tensor, encoder, 
                         decoder, encoder_optimizer, decoder_optimizer, criterion, 
@@ -330,6 +362,7 @@ def main():
             #########################################
             if iter_total % ckpt == 0:
                 elapsed = time.time() - start
+                # print("입력 문장: {} 기대 출력 문장: {}".format(input_tensor.tolist(), target_tensor.tolist()))
                 print('epoch : %d iter_total: %d\telapsed time: %.2f min\t avg_loss: %.2f' % (epoch, iter_total, elapsed / 60, loss_total / iter_total))
 
 
@@ -349,6 +382,49 @@ def main():
         evaluate(encoder, decoder, source_index2word, source_word2index, target_index2word, target_word2index, 
                 MAX_LENGTH, device)
 
+def test_only():
+    #########################################
+    # cuda를 사용할 것인지, cpu를 사용할 것인지 선택
+    #########################################
+    print("device setting...")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print("we will use...."+device+"!\n")
+    device = torch.device(device)
+
+    #########################################
+    # encoder, decoder 불러오기 (⚠️ 불러올 수 있을 때만 사용할 것)
+    #########################################
+    encoder = torch.load('ENCODER')
+    decoder = torch.load('DECODER')
+    print("finished loading encoder and decoder as a file")  
+
+    #########################################
+    # tokenizing and preprocessing of train data
+    #########################################
+    print("tokenizing...")
+    source_texts, target_texts, target_labels = tokenize('data/eng-fra_train.txt')
+
+    source_word2index, source_index2word = preprocess(source_texts)
+    target_word2index, target_index2word = preprocess(target_texts)
+
+    source_ind_texts = wordtext2indtext(source_texts, source_word2index)
+    target_ind_texts = wordtext2indtext(target_texts, target_word2index)
+    target_ind_labels = wordtext2indtext(target_labels, target_word2index)
+
+    source_max_length = max([len(each) for each in source_ind_texts])
+    target_max_length = max([len(each) for each in target_ind_texts])
+    MAX_LENGTH = max(source_max_length, target_max_length)
+
+    print("------------------------------------")
+    print("SOURCE WORD2INDEX MAX LENGTH : ", source_max_length)
+    print("TARGET WORD2INDEX MAX LENGTH : ", target_max_length)
+
+    #########################################
+    # 테스트 진행
+    #########################################
+    with torch.no_grad():
+        evaluate(encoder, decoder, source_index2word, source_word2index, target_index2word, target_word2index, 
+                MAX_LENGTH, device)
 
 if __name__ == "__main__":
-    main()
+    test_only()
