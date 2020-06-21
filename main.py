@@ -213,35 +213,34 @@ def evaluate(encoder, decoder, source_index2word, source_word2index, target_inde
             torch.tensor(t, dtype=torch.long, device=device).view(-1, 1)) \
             for s, t in zip(source_ind_texts, target_ind_labels)]
 
-    bleu_references = []
-    bleu_hypotheses = []
-
     #########################################
     # Start testing
     #########################################
     print("\n<START TESTING-------------->")   
 
-    for iter in range(1, 100):
+    total_bleu = 0
+
+    for iter in range(1, len(testing_pairs) + 1):
         testing_pair  = testing_pairs[iter - 1]
         input_tensor = testing_pair[0]
         target_tensor = testing_pair[1]
 
         decoded_text = evaluate_Iter(input_tensor, target_tensor, encoder, decoder, source_word2index, target_word2index, MAX_LENGTH, device)
 
-        print('iter %d ------------------------------' % (iter))
-        # print(input_tensor.squeeze().cpu().tolist())
-        print_index_text(input_tensor.squeeze().cpu().tolist(), source_index2word, 0)
-        # print(decoded_text.view(1, -1).cpu().tolist()[0])
-        print_index_text(decoded_text.view(1, -1).cpu().tolist()[0], target_index2word, 1)
-        bleu_references.append(convert_index_text(target_tensor.squeeze().cpu().tolist(), target_index2word))
-        bleu_hypotheses.append(convert_index_text(decoded_text.view(1, -1).cpu().tolist()[0], target_index2word))
+        # print('iter %d ------------------------------' % (iter))
+        # print_index_text(input_tensor.squeeze().cpu().tolist(), source_index2word, 0)
+        # print_index_text(decoded_text.view(1, -1).cpu().tolist()[0], target_index2word, 1)
+        
+        bleu_references = (convert_index_text(target_tensor.squeeze().cpu().tolist(), target_index2word))
+        bleu_hypotheses = (convert_index_text(decoded_text.view(1, -1).cpu().tolist()[0], target_index2word))
 
-    #########################################
-    # BLEU 측정 (nltk 설치 필수)
-    #########################################
-    print("BLEU SCORE")
-    print(bleu.corpus_bleu(bleu_references, bleu_hypotheses))
-    print('--------------------------------------')
+        #########################################
+        # BLEU 측정 (nltk 설치 필수)
+        #########################################
+        total_bleu += bleu.sentence_bleu([bleu_references], bleu_hypotheses)
+
+    print('average BLEU score : %.3f\n' % (total_bleu / len(testing_pairs)))
+
 
 def main():
 
