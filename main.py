@@ -194,10 +194,6 @@ def evaluate_Iter(input_tensor, target_tensor, encoder, decoder, source_word2ind
 
         decoded_text.append(output_argmax)
 
-        #####################################
-        # 😎 Evaluation에선 Teacher Forcing이 아니라
-        # 이전 계층에서 얻은 값을 다음 계층의 input으로 사용
-        #####################################
         decoder_input = output_argmax
 
     return torch.tensor(decoded_text, device=device)
@@ -245,6 +241,7 @@ def evaluate(encoder, decoder, source_index2word, source_word2index, target_inde
 
     print('average BLEU score : %.3f\n' % (total_bleu / len(testing_pairs)))
 
+    return (total_bleu / len(testing_pairs))
 
 def main():
     
@@ -320,8 +317,7 @@ def main():
     #########################################
     loss_total = 0
     iter_total = 0
-    epoches = 1
-    ckpt = 50
+    epoches = 50
     
     #########################################
     # Start training
@@ -332,6 +328,9 @@ def main():
 
     start = time.time()
     
+    loss_array = []
+    bleu_array = []
+
     for epoch in range(1, epoches + 1):
         for iter in range(1, len(training_pairs) + 1):
             training_pair  = training_pairs[iter - 1]
@@ -347,31 +346,26 @@ def main():
             
             loss_total += loss 
             iter_total += 1
-            #########################################
-            # 정해진 checkpoint(ckpt)마다 시간과 평균 손실을 출력
-            #########################################
-            if iter_total % ckpt == 0:
-                elapsed = time.time() - start
-                # print("입력 문장: {} 기대 출력 문장: {}".format(input_tensor.tolist(), target_tensor.tolist()))
-                print('epoch : %d iter_total: %d\telapsed time: %.2f min\t avg_loss: %.2f' % (epoch, iter_total, elapsed / 60, loss_total / iter_total))
+          
+        elapsed = time.time() - start
+        # print("입력 문장: {} 기대 출력 문장: {}".format(input_tensor.tolist(), target_tensor.tolist()))
+        print('epoch : %d\telapsed time: %.2f min\t avg_loss: %.2f' % (epoch, elapsed / 60, loss_total / iter_total))
+        bleu_sc = evaluate(encoder, decoder, source_index2word, source_word2index, target_index2word, target_word2index, 
+            MAX_LENGTH, device)
 
+        loss_array.append(loss_total / iter_total)
+        bleu_array.append(bleu_sc)
 
-    #########################################
-    # 마지막으로 시간과 평균 손실 출력
-    # 그리고 Encoder, Decoder 모델 저장
-    #########################################
-    elapsed = time.time() - start
     print('<FINISHED TRAINING-------------->')
-    print('epoch : %d iter_total: %d\telapsed time: %.2f min\t avg_loss: %.2f' % (epoch, iter_total, elapsed / 60, loss_total / iter_total))
 
-    torch.save(encoder, 'ENCODER')
-    torch.save(decoder, 'DECODER')
-    print("finished saving encoder and decoder as a file")    
+    import csv    
+
+    with open("output.csv", "w") as f:
+        wr = csv.writer(f)
+        wr.writerow(["Epoch", "Loss", "BLEU"])    
+        for a in range(0, epoches):
+            wr.writerow([a + 1, loss_array[a], bleu_array[a]])
     
-    with torch.no_grad():
-        evaluate(encoder, decoder, source_index2word, source_word2index, target_index2word, target_word2index, 
-                MAX_LENGTH, device)
-
 def test_only():
     #########################################
     # cuda를 사용할 것인지, cpu를 사용할 것인지 선택
