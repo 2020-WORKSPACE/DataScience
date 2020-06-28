@@ -194,7 +194,11 @@ def evaluate_Iter(input_tensor, target_tensor, encoder, decoder, source_word2ind
 
         decoded_text.append(output_argmax)
 
-        decoder_input = target_tensor[di]  # Teacher forcing
+        #####################################
+        # 😎 Evaluation에선 Teacher Forcing이 아니라
+        # 이전 계층에서 얻은 값을 다음 계층의 input으로 사용
+        #####################################
+        decoder_input = output_argmax
 
     return torch.tensor(decoded_text, device=device)
 
@@ -243,19 +247,6 @@ def evaluate(encoder, decoder, source_index2word, source_word2index, target_inde
 
 
 def main():
-
-    #########################################
-    # 예시 문장을 통해 BLEU 테스트 (nltk 설치 필수)
-    #########################################
-    hyp1 = ['It', 'is', 'a', 'guide', 'to', 'action', 'which', 'ensures', 'that', 'the', 'military', 'always', 'obeys', 'the',  'commands', 'of', 'the', 'party']
-    ref1a = ['It', 'is', 'a', 'guide', 'to', 'action', 'that', 'ensures', 'that', 'the', 'military', 'will', 'forever', 'heed', 'Party', 'commands']
-    ref1b = ['It', 'is', 'the', 'guiding', 'principle', 'which', 'guarantees', 'the', 'military', 'forces', 'always', 'being', 'under', 'the', 'command', 'of', 'the', 'Party']
-    ref1c = ['It', 'is', 'the', 'practical', 'guide', 'for', 'the', 'army', 'always', 'to', 'heed', 'the', 'directions', 'of', 'the', 'party']
-    hyp2 = ['he', 'read', 'the', 'book', 'because', 'he', 'was', 'interested', 'in', 'world', 'history']
-    ref2a = ['he', 'was', 'interested', 'in', 'world', 'history', 'because', 'he', 'read', 'the', 'book']
-
-    print(bleu.corpus_bleu([[ref1a, ref1b], [ref2a]], [hyp1, hyp2]))
-    print("BLEU Available")
     
     #########################################
     # cuda를 사용할 것인지, cpu를 사용할 것인지 선택
@@ -329,7 +320,7 @@ def main():
     #########################################
     loss_total = 0
     iter_total = 0
-    epoches = 50
+    epoches = 1
     ckpt = 50
     
     #########################################
@@ -426,4 +417,4 @@ def test_only():
                 MAX_LENGTH, device)
 
 if __name__ == "__main__":
-    test_only()
+    main()
